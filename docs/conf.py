@@ -48,7 +48,7 @@ copyright = u'2013, Adam M. Donahue'
 # built documents.
 #
 # The short X.Y version.
-version = '0.0.1.alpha'
+version = '0.0.4.alpha'
 # The full version, including alpha/beta/rc tags.
 release = '0.0.1.alpha'
 
