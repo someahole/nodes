@@ -80,11 +80,6 @@ Current Limitations
   state in time - thatis, how the graph was used before
   the time at which you asked it for its structure.)
 
-Documentation
--------------
-
-I'm posting the documentation to readthedocs.com; stay tuned.
-
 Using nodes: Requirements
 -------------------------
 
