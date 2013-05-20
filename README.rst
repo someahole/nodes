@@ -85,8 +85,8 @@ Documentation
 
 I'm posting the documentation to readthedocs.com; stay tuned.
 
-Using nodes: A Simple Example
------------------------------
+Using nodes: Requirements
+-------------------------
 
 Putting an object on the graph is easy, as this example
 illustrates. There are three things a developer must do.
@@ -115,16 +115,13 @@ is a pure function, whereas::
 is not.  
 
 A function has *side-effects* if it modifies global state
-in any way.  Typically these two things go hand-in-hand.
-So cubed is pure and side-effect free, but file.readline is
-impure (it can return different values across calls) and
-has side effects (each call to readline, for example,
-updates state regarding where the next call should start 
-reading).
+in any way.  cubed is side-effect free, but file.readline is not,
+as it would update state indicating where in the file
+its next read should occur.
 
-The documentation will contain more detail on the model
-used and the patterns one can leverage to perform common
-operations in a graph-consistent manner.  
+Purity and lack of side-effects often go hand-in-hand, and
+vice-versa.
+
 
 Why is purity so important?  Because without purity we cannot
 know when a function's value needs to be recomputed; if that
@@ -134,17 +131,53 @@ to be invalidated.  And a huge benefit of the graph is
 its support for automatic node invalidation,
 node memoization, and lazy evaluation of node functions.
 
-So yes, there are a lot of caveats, but in practice
-they are not as difficult to surmount as you might think,
-and indeed, following these practices will make your
-programs that much clearer.
+(The documentation will contain more detail on the model
+used and the patterns one can leverage to perform common
+operations in a graph-consistent manner.  I don't want to
+get too Haskell-y on you because this is a Python module, 
+not a Haskell library.)
 
-On to the example.
+So you may be thinking, jeez, this all sounds quite 
+mathy and it sounds as if it'll be a pain to write
+proper on-graph methods.
 
-What follows is code that that illustrates how a user would
-create a on-graph object using nodes.::
+That's a fair initial reaction.  But the reality is
+that developing with nodes is not that diffcult, and if you
+follow its practices you end up with cleaner code
+and maybe even a new way of thinking about problems.
 
-    import nodes
+An Example
+----------
+
+The following example illustrates how you might use nodes
+to put a simple example class on the graph.  It doesn't
+cover all of nodes' features but will give you an idea
+of its flavor.
+
+The comments below indicate the status of each graph
+method after a given calculation.  At this point
+I'm going to switch to using the term "node" instead of
+method, as in reality a method may map to multiple nodes
+(for example, in the case where the method has arguments
+in addition to self).
+
+* invalid: The node is not set and the method body will run when its
+  value is next requested.
+* calced: The node is valid and its value was calculated by
+  running the function body and memoizing the result.  As long as
+  the node remains valid its memoized output will be returned with
+  no recomputation required.
+* set: The node was set to a specific value by the user.  This
+  setting is non-contextual (global) to the graph.
+* overlaid: The node was overlaid to a specific value by the user
+  within a GraphContext.  The overlay is active only within the 
+  context, and upon exiting the context the node's state is
+  reverted to its prior value.  (This is not strictly true; if 
+  global dependencies changed that were hidden by the context the
+  node might have been invalidated outside the context and thus
+  require computation the next time it's valid is requested.)
+
+That said, here is the code::
 
     class Example(nodes.GraphObject):
 
