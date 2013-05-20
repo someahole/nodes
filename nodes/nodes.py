@@ -82,6 +82,9 @@ class Graph(object):
         node.clearSet()
 
     def overlayValue(self, node, value):
+        """Adds a overlay to the active graph context and immediately applies it to the node.
+
+        """
         if self.isComputing():
             raise RuntimeError("You cannot overlay a node during graph evaluation.")
         if not self.activeGraphContext:
@@ -89,6 +92,9 @@ class Graph(object):
         self.activeGraphContext.overlayValue(node, value)
 
     def clearOverlay(self, node):
+        """Clears an overlay previously set in the active graph context.
+
+        """
         if self.isComputing():
             raise RuntimeError("You cannot clear a overlay during graph evaluation.")
         if not self.activeGraphContext:
@@ -122,18 +128,52 @@ class GraphVisitor(object):
 
 class GraphContext(object):
     """A graph context is collection of temporary node changes
-    that can be applied and unapplied without modifying the
-    top-level node settings.
+    (called overlays) that can be applied and unapplied
+    without modifying the global node settings or overlays in
+    higher-level contexts.
 
-    Contexts can be saved to variables and passed around,
-    and are applied using Python with statement.
+    The user creates a graph context by using the object
+    as a context and setting overlays on the nodes he wishes
+    to modify within that context.
+
+    The general syntax is:
+
+        with GraphContext() as c:
+            o.X.overlayValue(...)
+            o.Y.overlayValue(...)
+
+            ...
+
+    once created, a context can be applied similarly:
+
+        with c:
+            ...
+
+    additional overlays applied when using the context in the
+    second case are not saved to the context.
+
+    One can also create a GraphContext that inherits nodes
+    from a parent context.
 
     """
     def __init__(self, parentGraphContext=None):
+        # TODO: At the moment contexts reference parents, and don't copy their
+        #       nodes.  This means a node cleared or added to a parent context
+        #       will affect the child context.  I'm not sure this is good.
+        #       It also means maintaining additional state in every context,
+        #       namely, the nodes that are overlaid in a higher level context
+        #       but that have been cleared in the current context.
+        #
+        #       Bottom line, I'll probably change this to do a copy
+        #       of the parent overlays at context creation time, and then
+        #       break that relationship.
+        #
         self._parentGraphContext = parentGraphContext
-        self._overlays = {}      # Node overlays by node.
-        self._state = {}         # Node values by node.
-        self._applied = set()    # Nodes whose tweaks in this context have been applied.
+        self._overlays = {}           # Node overlays by node.
+        self._state = {}              # Node values by node.
+        self._applied = set()         # Nodes whose overlays in this context have been applied.
+        self._removed = set()         # Nodes set at a higher level but cleared here.
+        self._populating = True
 
     def addOverlay(self, node, value):
         """Adds a new overlay to the graph context, but does not apply it to the node.
@@ -142,21 +182,23 @@ class GraphContext(object):
 
         """
         self._overlays[node] = value
+        if node in self._removed:
+            self._removed.remove(node)
 
     def removeOverlay(self, node):
         """Removes an overlay from the graph context, but does not unapply it from
         the node.
 
         """
-        del self._overlays[node]
+        self._removed.add(node)
+        if node in self._overlays:
+            del self._overlays[node]
 
     def overlayValue(self, node, value):
         """Adds an overlay to the graph context and immediately applies it to
         the node.
 
         """
-        if node in self._overlays:
-            self.removeOverlay(node)
         self.addOverlay(node, value)
         self.applyOverlay(node)
 
@@ -166,6 +208,7 @@ class GraphContext(object):
         reapply them later.
 
         """
+        # FIXME: State handling is a bit too coupled here, I think.
         if node.isOverlaid() and node not in self._applied:
             self._state[node] = node.getOverlay()
         node.overlayValue(self.getOverlay(node))
@@ -181,7 +224,13 @@ class GraphContext(object):
         # existing overlays that may have been applied outside of this
         # graph context. 
         #
-        if self.hasOverlay(node) and self.isOverlaid(node):
+        # If we're populating, remove it from the context as well.  
+        #
+        # TODO: I'm refactoring this now that I have a better handle 
+        #       on the interactions between contexts.  I wanted to get 
+        #       something out people could use first, kinks and all.
+        #
+        if self.isOverlaid(node):
             # If the node had a value that we stashed away, restore it.
             # Otherwise, clear it.
             if node in self._state:
@@ -203,6 +252,8 @@ class GraphContext(object):
                 del self._state[node]
             else:
                 node.clearOverlay()
+            if self._populating:
+                self.removeOverlay(node)
             self._applied.remove(node)
 
     def isOverlaid(self, node):
@@ -217,6 +268,8 @@ class GraphContext(object):
         graph context.
 
         """
+        if node in self._removed:
+            return False
         if node in self._overlays:
             return True
         if includeParent and self._parentGraphContext:
@@ -235,6 +288,8 @@ class GraphContext(object):
             return self._overlays.copy()
         overlays = self._parentGraphContext.allOverlays()
         overlays.update(self._overlays)
+        for removed in self._removed:
+            overlays.pop(removed)
         return overlays
 
     def getOverlay(self, node, includeParent=True):
@@ -255,17 +310,33 @@ class GraphContext(object):
         away to be restored when we exit the current context.
 
         """
+        # TODO: Differentiate between "with GraphContext() as c" and "with c":
+        #       the latter should not update the context when new overlays are
+        #       added or removed.
+        #
         self.activeParentGraphContext, graph.activeGraphContext = graph.activeGraphContext, self
-        for node in self.allOverlays():
-            self.applyOverlay(node)
+
+        # If we're not populating, create a dummy context to collect overlay changes that
+        # we don't want to store to the the actual context.
+        #
+        # I'm probably going to break this into two contexts at some point.
+        #
+        if not self._populating:
+            graph.activeGraphContext = GraphContext(parentGraphContext=graph.activeGraphContext)
+        for node in graph.activeGraphContext.allOverlays():
+            graph.activeGraphContext.applyOverlay(node)
         return self
 
     def __exit__(self, *args):
         """Exit the graph context and remove any applied overlays.
 
         """
-        for node in self.allOverlays():
-            self.clearOverlay(node)
+        # We only populate the first time we enter the context.
+        #
+        if self._populating:
+            self._populating = False
+        for node in graph.activeGraphContext.allOverlays():
+            graph.activeGraphContext.clearOverlay(node)
         graph.activeGraphContext = self.activeParentGraphContext
 
 class GraphMethod(object):
@@ -701,6 +772,12 @@ class GraphInstanceMethod(object):
     def clearOverlay(self, *args):
         graph.clearOverlay(self.node(*args))
 
+    def isSet(self, *args):
+        return self.node(*args).isSet()
+
+    def isOverlaid(self, *args):
+        return self.node(*args).isOverlaid()
+    
 class GraphType(type):
     """Metaclass responsible for creating on-graph objects.
 
