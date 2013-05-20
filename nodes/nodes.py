@@ -719,64 +719,11 @@ class GraphType(type):
         cls._graphMethods = graphMethods
         cls._savedGraphMethods = [graphMethod for graphMethod in graphMethods if graphMethod.isSaved()]
 
-class DB(object):
-    """A database of GraphObjects.
-
-    """
-    # TODO: A placeholder until a real database interface has been introduced.
-
-    LIMBO = '/limbo'    # Limbo objects don't have a true path and cannot be written out.
-
-    def __getitem__(self, path):
-        return self.read(path)
-
-    def new(self, typeName, path=None, **kwargs):
-        """Create a new object of the specified type
-        with the given path (or in limbo, if no path
-        is specified), optionally initialized with
-        the given kwargs.
-
-        """
-        raise NotImplementedError()
-
-    def readOrNew(self, typeName, path=None, **kwargs):
-        if self.exists(path):
-            return self.read(path)
-        return self.new(typeName, path, **kwargs)
-
-    def exists(self, path):
-        raise NotImplementedError()
-
-    def read(self, path):
-        raise NotImplementedError()
-
-    def readObj(self, path):
-        raise NotImplementedError()
-
-    def readMany(self, paths):
-        return [self.readObj(path) for path in paths]
-
-    def write(self, obj):
-        raise NotImplementedError()
-
-currentDb = DB()
-
 class GraphObject(object):
     """A graph-enabled object.
 
     """
     __metaclass__ = GraphType
-
-    _path  = None
-    _isnew = True
-
-    db = currentDb
-
-    def path(self):
-        return self._path
-
-    def isnew(self):
-        return self._isnew
 
     def __setattr__(self, name, value):
         v = getattr(self, name)
