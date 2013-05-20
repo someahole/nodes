@@ -6,9 +6,9 @@ An easy-to-use graph-based object model for Python.
 Example
 -------
 
-import nodes
+ import nodes
 
-class Example(nodes.GraphObject):
+ class Example(nodes.GraphObject):
 
     @nodes.graphmethod
     def X(self):
@@ -22,7 +22,7 @@ class Example(nodes.GraphObject):
     def Z(self):
         return 'Z'
 
-def main():                     
+ def main():                     
     example = Example()
     
     # Run a computation for the first time.  This triggers
