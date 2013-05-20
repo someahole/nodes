@@ -141,8 +141,8 @@ that developing with nodes is not that diffcult, and if you
 follow its practices you end up with cleaner code
 and maybe even a new way of thinking about problems.
 
-An Example
-----------
+Using nodes: An Example
+-----------------------
 
 The following example illustrates how you might use nodes
 to put a simple example class on the graph.  It doesn't
