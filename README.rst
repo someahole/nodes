@@ -98,7 +98,7 @@ Two of these are technical:
   @graphMethod.
 
 The third is has to do with the semantics of the methods
-he has decorated with using @graphMethod.  All 
+he has decorated with @graphMethod.  All 
 graph methods must be *pure and side-effect free* (with
 some exceptions that we need not delve into here).
 
