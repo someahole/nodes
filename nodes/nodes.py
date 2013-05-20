@@ -10,8 +10,7 @@ Serializable = 0x2
 Saved        = Settable | Serializable
 
 class Graph(object):
-    """Plumbing that drives and manages updates to and
-    computations of nodes in a directed acyclic graph.
+    """Core graph plumbing; essentially the controller.
 
     """
     def __init__(self):
