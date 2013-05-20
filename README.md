@@ -1,4 +1,4 @@
 nodes
 =====
 
-Add graph-based support to Python objects.
+An easy-to-use graph-oriented programming model for Python.
