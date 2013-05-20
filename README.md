@@ -1,4 +1,4 @@
 nodes
 =====
 
-An easy-to-use graph-oriented programming model for Python.
+An easy-to-use graph-oriented object model for Python.
