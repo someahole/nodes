@@ -1,7 +1,7 @@
 nodes
 =====
 
-An easy-to-use graph-based object model for Python.
+An easy-to-use graph-oriented object model for Python.
 
 Example
 -------
@@ -67,6 +67,3 @@ Example
                     print example.X()    # Prints 'X:y:'
                 print example.X()  # Prints 'X:y:z'
             print example.X()      # Prints 'X:Y:Z'
-            
-        
-            
