@@ -3,8 +3,20 @@ nodes
 
 An easy-to-use graph-oriented object model for Python.
 
+Features
+--------
+
+* Ease of use.
+* Automatic dependency tracking and invalidation for on-graph nodes.
+* Lazy evaluation.
+* Memoization.
+* Change delegation.
+* Contextual evaluation.  (What-if scenario building.)
+
 Example
 -------
+
+Here is a simple example::
 
     import nodes
 
