@@ -167,7 +167,7 @@ class GraphContext(object):
         reapply them later.
 
         """
-        if node.isOverlayed() and node not in self._applied:
+        if node.isOverlaid() and node not in self._applied:
             self._state[node] = node.getOverlay()
         node.overlayValue(self.getOverlay(node))
         self._applied.add(node)
@@ -178,11 +178,11 @@ class GraphContext(object):
         removes it from the overlay data.
 
         """
-        # If the node was overlayed in this graph context, we need to restore any
+        # If the node was overlaid in this graph context, we need to restore any
         # existing overlays that may have been applied outside of this
         # graph context. 
         #
-        if self.hasOverlay(node) and self.isOverlayed(node):
+        if self.hasOverlay(node) and self.isOverlaid(node):
             # If the node had a value that we stashed away, restore it.
             # Otherwise, clear it.
             if node in self._state:
@@ -204,7 +204,7 @@ class GraphContext(object):
                 node.clearOverlay()
             self._applied.remove(node)
 
-    def isOverlayed(self, node):
+    def isOverlaid(self, node):
         """Return True if a overlay in this graph context (or any of its parents)
         is active on the node.
 
@@ -226,7 +226,7 @@ class GraphContext(object):
         """Returns a list of all overlays presnet in the graph context.
 
         If includeParent is True (the default) also includes
-        parent overlays that haven't been overlayed specifically
+        parent overlays that haven't been overlaid specifically
         in this graph context.
 
         """
@@ -283,7 +283,7 @@ class GraphMethod(object):
         bounded to the instance as GraphInstanceMethods.
 
         By default all GraphInstanceMethods are read-only
-        (i.e., cannot be set or overlayed, and always derive values
+        (i.e., cannot be set or overlaid, and always derive values
         via their underlying method).
 
         Use flags to modify this default behavior.
@@ -407,9 +407,9 @@ class Node(object):
         #       operation but overlaying it is temporary and graph context-
         #       specific.
         #
-        self._isOverlayed    = False
-        self._isSet        = False
-        self._isCalced     = False
+        self._isOverlaid = False
+        self._isSet      = False
+        self._isCalced   = False
 
         # TODO:  I'm maintaining values for overlays, sets, and calcs 
         #        each in a separate namespace, which is necessary 
@@ -417,9 +417,9 @@ class Node(object):
         #        overlays are set, but maintaining them within the node 
         #        itself is questionable.  I need to rethink this.
         #
-        self._overlayedValue = None
-        self._setValue     = None
-        self._calcedValue  = None
+        self._overlaidValue = None
+        self._setValue      = None
+        self._calcedValue   = None
 
     def addInput(self, inputNode):
         """Informs the node of an input dependency, which indicates
@@ -479,8 +479,8 @@ class Node(object):
         #       how a node was fixed/calced.  Short story: this will
         #       be rewritten.
         #
-        if self.isOverlayed():
-            return self._overlayedValue
+        if self.isOverlaid():
+            return self._overlaidValue
         if self.isSet():
             return self._setValue
         if not self.isCalced():
@@ -506,7 +506,7 @@ class Node(object):
 
     def _invalidateCalc(self):
         """Removes any calculated value, forcing a recalculation
-        the next time the node has no set or overlayed value.
+        the next time the node has no set or overlaid value.
 
         """
         self._invalidateOutputCalcs()
@@ -553,44 +553,44 @@ class Node(object):
         nonetheless invalidates any output nodes.
 
         """
-        # TODO: Perhaps optimize for _overlayedValue == value case.
+        # TODO: Perhaps optimize for _overlaidValue == value case.
         self._invalidateOutputCalcs()
-        self._overlayedValue = value
-        self._isOverlayed = True
+        self._overlaidValue = value
+        self._isOverlaid = True
 
     def clearOverlay(self):
         """Clears the current overlay, if any, invalidating
         outputs if a overlay was actually cleared.
 
         """
-        if not self.isOverlayed():
+        if not self.isOverlaid():
             return
         self._invalidateOutputCalcs()
-        self._isOverlayed = False
-        self._overlayedValue = None
+        self._isOverlaid = False
+        self._overlaidValue = None
 
     def getOverlay(self):
         """Returns the value of the current overlay, if any, or
         raises an exception otherwise.
 
         """
-        if not self.isOverlayed():
-            raise Exception("This node is not overlayed.")
-        return self._overlayedValue
+        if not self.isOverlaid():
+            raise Exception("This node is not overlaid.")
+        return self._overlaidValue
 
     def isValid(self):
         """Returns True if the node does not need recomputation.
 
         """
-        return self._isOverlayed or self._isSet or self._isCalced
+        return self._isOverlaid or self._isSet or self._isCalced
 
-    def isOverlayed(self):
-        """Returns True if this node is overlayed, False otherwise.
+    def isOverlaid(self):
+        """Returns True if this node is overlaid, False otherwise.
 
         Overlays are independent of sets and calcs.
 
         """
-        return self._isOverlayed
+        return self._isOverlaid
 
     def isSet(self):
         """Return True if this node was set to an explicit value.
@@ -618,12 +618,12 @@ class Node(object):
                 )
 
     def __str__(self):
-        return '<Node %s.%s(%s) isSet=%s;isOverlayed=%s;isCalced=%s>' % (
+        return '<Node %s.%s(%s) isSet=%s;isOverlaid=%s;isCalced=%s>' % (
                 self.graphObject.__class__.__name__,
                 self.graphMethod.name,
                 str(self.args),
                 self.isSet(),
-                self.isOverlayed(),
+                self.isOverlaid(),
                 self.isCalced()
                 )
 
