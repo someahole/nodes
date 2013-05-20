@@ -1,4 +1,4 @@
-"""nodes: An easy-to-use graph-based object model for Python.
+"""nodes: An easy-to-use graph-oriented object model for Python.
 
 """
 import collections
@@ -14,7 +14,7 @@ class Graph(object):
 
     """
     def __init__(self):
-        self.nodes = {}             # All active nodes in the graph, by node key.
+        self.nodes = {}                 # All nodes in the graph, by node key.
         self.activeNode = None
         self.activeGraphContext = None
 
@@ -48,22 +48,21 @@ class Graph(object):
         """
         # TODO: Consider rewriting as a visitor or context.
         #
-        outputNode = graph.activeNode
+        outputNode, graph.activeNode = graph.activeNode, node
         try:
             if outputNode:
                 outputNode.addInput(node)
                 node.addOutput(outputNode)
-            graph.activeNode = node
             return node.getValue()
         finally:
             graph.activeNode = outputNode
 
     def setValue(self, node, value):
-        """Sets for value for a node, assuming the node
-        permits it to be set.
+        """Sets for value of a node, and raises an exception
+        if the node is not settable.
 
         """
-        if self.activeNode:
+        if self.isComputing():
             raise RuntimeError("You cannot set a node during graph evaluation.")
         node.setValue(value)
 
@@ -78,24 +77,23 @@ class Graph(object):
         value, if one is present.
 
         """
-        if self.activeNode:
+        if self.isComputing():
             raise RuntimeError("You cannot clear a set value during graph evaluation.")
         node.clearSet()
 
     def overlayValue(self, node, value):
-        if self.activeNode:
+        if self.isComputing():
             raise RuntimeError("You cannot overlay a node during graph evaluation.")
         if not self.activeGraphContext:
             raise RuntimeError("You cannot overlay a node outside a graph context.")
         self.activeGraphContext.overlayValue(node, value)
 
     def clearOverlay(self, node):
-        if self.activeNode:
+        if self.isComputing():
             raise RuntimeError("You cannot clear a overlay during graph evaluation.")
         if not self.activeGraphContext:
             raise RuntimeError("You cannot clear a overlay outside a graph context.")
         self.activeGraphContext.clearOverlay(node)
-
 
 class GraphVisitor(object):
     """Visits a hierarchy of graph nodes in depth first order.
@@ -133,25 +131,27 @@ class GraphContext(object):
     """
     def __init__(self, parentGraphContext=None):
         self._parentGraphContext = parentGraphContext
-        self._overlays      = {}   # Node overlays by node.
-        self._state       = {}   # Node values by node.
-        self._applied     = set()
+        self._overlays = {}      # Node overlays by node.
+        self._state = {}         # Node values by node.
+        self._applied = set()    # Nodes whose tweaks in this context have been applied.
 
     def addOverlay(self, node, value):
-        """Add a new overlay to the graph context, but does not apply it to the node.
+        """Adds a new overlay to the graph context, but does not apply it to the node.
+
+        If an existing overlay is already set, replaces its value.
 
         """
         self._overlays[node] = value
 
     def removeOverlay(self, node):
-        """Removes a overlay from the graph context, but does not unapply it from
+        """Removes an overlay from the graph context, but does not unapply it from
         the node.
 
         """
         del self._overlays[node]
 
     def overlayValue(self, node, value):
-        """Adds a overlay to the graph context and immediately applies it to
+        """Adds an overlay to the graph context and immediately applies it to
         the node.
 
         """
@@ -161,7 +161,7 @@ class GraphContext(object):
         self.applyOverlay(node)
 
     def applyOverlay(self, node):
-        """Applies a overlay to a node, stashing away any existing
+        """Applies an overlay to a node, stashing away any existing
         overlays (from another graph context) that were inherited so we can
         reapply them later.
 
@@ -185,7 +185,7 @@ class GraphContext(object):
             # If the node had a value that we stashed away, restore it.
             # Otherwise, clear it.
             if node in self._state:
-                # TODO: I reoverlay here - which kind of seems wrong in that the
+                # TODO: I re-overlay here - which kind of seems wrong in that the
                 #       original overlay was never really "removed," but at present
                 #       will work for our cases.  This also has the side-effect 
                 #       of invalidating the parent node, which again is something
@@ -193,6 +193,8 @@ class GraphContext(object):
                 #       our overlays.  Nevertheless, it'd be nice to merely preserve
                 #       the original state and avoid the recalculation of the 
                 #       parent nodes if they really don't need to be recalculated.
+                #       I believe this should be straight-forward once we have sets
+                #       fully isolated.
                 #
                 #       Also we don't clear our existing overlay here, relying on
                 #       fact that overlaying the node will essentially do that for us.
@@ -204,14 +206,14 @@ class GraphContext(object):
             self._applied.remove(node)
 
     def isOverlaid(self, node):
-        """Return True if a overlay in this graph context (or any of its parents)
+        """Return True if an overlay in this graph context (or any of its parents)
         is active on the node.
 
         """
         return node in self._applied
 
     def hasOverlay(self, node, includeParent=True):
-        """Returns True if a overlay exists for the node in this
+        """Returns True if an overlay exists for the node in this
         graph context.
 
         """
@@ -225,7 +227,7 @@ class GraphContext(object):
         """Returns a list of all overlays presnet in the graph context.
 
         If includeParent is True (the default) also includes
-        parent overlays that haven't been overlaid specifically
+        parent overlays that haven't been set specifically
         in this graph context.
 
         """
@@ -239,6 +241,9 @@ class GraphContext(object):
         """Returns the overlay for the specified
         node as it exists within this graph context.
 
+        Raises an exception if an overlay for the node does
+        not exist.
+
         """
         return self.allOverlays(includeParent=includeParent)[node]
 
@@ -247,11 +252,10 @@ class GraphContext(object):
 
         Note that overlays always override already-applied overlays, so
         if overlays have been applied in a higher graph context, stash those
-        away to be restored when we exit the context.
+        away to be restored when we exit the current context.
 
         """
-        self.activeParentGraphContext = graph.activeGraphContext
-        graph.activeGraphContext = self
+        self.activeParentGraphContext, graph.activeGraphContext = graph.activeGraphContext, self
         for node in self.allOverlays():
             self.applyOverlay(node)
         return self
@@ -267,13 +271,13 @@ class GraphContext(object):
 class GraphMethod(object):
     """An unbound graph-enabled method.
 
-    Holds state and settings that all instances of an object
-    containing this method
+    Holds state and settings for all instances of an object
+    containing this method.
 
     """
 
     def __init__(self, method, name, flags=0, delegateTo=None):
-        """Creates a , which lifts a regular method
+        """Creates a new graph method, which lifts a regular method
         into a version that supports graph-based dependency
         tracking and other graph features.
 
@@ -299,9 +303,9 @@ class GraphMethod(object):
         a call to the callable is made instead, passing in the value
         the user specified.
 
-        The delegate must returns a list of NodeChange objects,
-        each of which is a mapping between another GraphInstanceMethod
-        and the value it will be set to.
+        The delegate must return a list of NodeChange objects,
+        each of which is a mapping between a GraphInstanceMethod (and
+        any arguments specific to its node) and the value it will be set to.
 
         """
         self.method = method
@@ -398,17 +402,17 @@ class Node(object):
         self._outputs = set()
         self._inputs = set()
 
-        # TODO: This is a bit of a hack.  If I set a value and then
-        #       overlay it, for example, there's no immediate reason
+        # TODO: This is a hack.  If I set a value and then
+        #       overlay its value, for example, there's no immediate reason
         #       I shouldn't be able to merely restore the old value.
-        #       For now this state is mained here, which works 
-        #       on the assumption that setting a node is a root
+        #       For now this state is maintaineded here, which works 
+        #       on the assumption that setting a node is a context-independent
         #       operation but overlaying it is temporary and graph context-
         #       specific.
         #
         self._isOverlaid = False
-        self._isSet      = False
-        self._isCalced   = False
+        self._isSet = False
+        self._isCalced = False
 
         # TODO:  I'm maintaining values for overlays, sets, and calcs 
         #        each in a separate namespace, which is necessary 
@@ -417,8 +421,8 @@ class Node(object):
         #        itself is questionable.  I need to rethink this.
         #
         self._overlaidValue = None
-        self._setValue      = None
-        self._calcedValue   = None
+        self._setValue = None
+        self._calcedValue = None
 
     def addInput(self, inputNode):
         """Informs the node of an input dependency, which indicates
@@ -574,7 +578,7 @@ class Node(object):
 
         """
         if not self.isOverlaid():
-            raise Exception("This node is not overlaid.")
+            raise RuntimeError("This node is not overlaid.")
         return self._overlaidValue
 
     def isValid(self):
@@ -628,8 +632,12 @@ class Node(object):
 
 
 class NodeChange(object):
-    """Encapsulates a pending change to a node, as returned
-    by a delegation function.
+    """Encapsulates a pending change to a node.  Intended to be
+    returned by delegates to indicate the nodes the delegate
+    wants to change.
+
+    (A delegate cannot changes these nodes directly as the
+    delegate runs during graph computation.)
 
     """
     def __init__(self, graphInstanceMethod, value, *args):
@@ -644,9 +652,9 @@ class NodeChange(object):
 
 
 class GraphInstanceMethod(object):
-    """A  bound to an instance of its class.
+    """A GraphMethod  bound to an instance of its class.
 
-    A GraphInstanceMethod provides the interface between the user object
+    A GraphInstanceMethod provides the glue linking the user object
     and the graph.
 
     """
@@ -746,17 +754,29 @@ class GraphObject(object):
         """Returns a dictionary of name/value pairs for all saved methods.
 
         """
+        # TODO: Flesh this out a bit: deep toDict, including settable nodes, perhaps, etc.
         return dict([(k.name, getattr(self, k.name)()) for k in self._savedGraphMethods])
 
-def graphMethod(thingy=0, delegateTo=None):
+def graphMethod(funcOrFlags=0, delegateTo=None):
     """Declare a GraphObject method as on-graph.
 
+    Use as a decorator, for example:
+
+        class Example(GraphObject):
+
+            @graphMethod
+            def X(self):
+                return self.Y()
+
+            @graphmethod(Settable)
+            def Y(self):
+                return ...
+
     """
-    if type(thingy) == types.FunctionType:
-        return GraphMethod(thingy, thingy.__name__)
-    flags = thingy
+    if type(funcOrFlags) == types.FunctionType:
+        return GraphMethod(funcOrFlags, funcOrFlags.__name__)
     def wrap(f):
-        return GraphMethod(f, f.__name__, flags, delegateTo=delegateTo)
+        return GraphMethod(f, f.__name__, funcOrFlags, delegateTo=delegateTo)
     return wrap
 
 graph = Graph()
@@ -766,3 +786,4 @@ graph = Graph()
 # TODO: Add database storage support.
 # TODO: Add subscriptions.
 # TODO: Productionize for large-scale use (perhaps with CPython).
+# TODO: Integrate with AMPS.
