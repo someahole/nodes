@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='nodes',
-      version='0.0.4.alpha',
+      version='alpha',
       description='An easy-to-use graph-oriented object model for Python.',
       classifiers=[
           "Programming Language :: Python",
