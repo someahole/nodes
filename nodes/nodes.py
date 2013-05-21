@@ -8,6 +8,7 @@ import types
 Settable     = 0x1
 Serializable = 0x2
 Saved        = Settable | Serializable
+Overlayable  = 0x4
 
 class Graph(object):
     """The core graph plumbing; essentially the controller and
@@ -374,6 +375,7 @@ class GraphMethod(object):
                             extracted as part of object state.
             * Saved         Equivalent to setting both Settable and Serializable.
 
+
         delegateTo is optional and if provided must be set to
         can be set to a callable.  In that case, when the value of the
         GraphInstanceMethod is set by a user (via a setValue operation),
@@ -396,6 +398,12 @@ class GraphMethod(object):
 
         """
         return self.flags & Settable
+
+    def isOverlayable(self):
+        return self.isSettable or self.flags & Overlayable
+
+    def isChangeable(self):
+        return self.isSettable() or self.isOverlayable() or self.delegatesChanges()
 
     def isSerializable(self):
         """Returns True if the value of a bound instance of the
@@ -435,6 +443,33 @@ class GraphMethod(object):
 
         """
         return self.method(graphObject, *args)
+
+# TODO: Move the value setting stuff out of Node.  Let's just create
+#       a Node per context, and have graph or context be responsible
+#       for tracking value changes, inputs/outputs, validity and
+#       the like.  For one thing, this means we don't have to provide
+#       an interface for a user to set a Node's value directly, which is 
+#       rife with issues, while also allowing a user to inspect a node's
+#       value or other state.
+#       
+
+class NodeReference(object):
+    """Stores the context-invariant parts of a Node, namely its
+    graphObject, graphMethod, and arguments, decoupling it
+    from the stuff that will depend on the context and state
+    of the graph.
+
+    """
+    def __init__(self, graphInstanceMethod, args=()):
+        self.graphInstanceMethod = graphInstanceMethod
+        self.args = args
+
+    def node(self, graph):
+        """Return the actual node.
+
+        """
+        # TODO: Support context-based lookup when nodes are stored in contexts.
+        return graph.lookupNode(self.graphInstanceMethod, args)
 
 class Node(object):
     """A node on the graph.
@@ -630,6 +665,8 @@ class Node(object):
 
         """
         # TODO: Perhaps optimize for _overlaidValue == value case.
+        if not self.graphMethod.isOverlayable():
+            raise RuntimeError("You cannot overlay this node.")
         self._invalidateOutputCalcs()
         self._overlaidValue = value
         self._isOverlaid = True
@@ -639,6 +676,8 @@ class Node(object):
         outputs if a overlay was actually cleared.
 
         """
+        if not self.graphMethod.isOverlayable():
+            raise RuntimeError("You cannot overlay this node, so certainly you can't clear any overlay!")
         if not self.isOverlaid():
             return
         self._invalidateOutputCalcs()
@@ -655,7 +694,7 @@ class Node(object):
         return self._overlaidValue
 
     def isValid(self):
-        """Returns True if the node does not need recomputation.
+        """Returns True if the node's value is current.
 
         """
         return self._isOverlaid or self._isSet or self._isCalced
@@ -782,7 +821,7 @@ class GraphInstanceMethod(object):
 
     def isOverlaid(self, *args):
         return self.node(*args).isOverlaid()
-    
+
 class GraphType(type):
     """Metaclass responsible for creating on-graph objects.
 
