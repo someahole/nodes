@@ -19,14 +19,14 @@ class Graph(object):
         self.activeNode = None          # The active node during a computation.
         self.activeGraphContext = None  # The active context.
 
-    def lookupNode(self, graphObject, graphMethod, args, create=True):
+    def lookupNode(self, graphInstanceMethod, args, create=True):
         """Returns the Node underlying the given object and its method
         as called with the specified arguments.
 
         """
-        key = (graphObject, graphMethod.name) + args
+        key = (graphInstanceMethod.graphObject, graphInstanceMethod.name) + args
         if key not in self.nodes and create:
-            self.nodes[key] = Node(graphObject, graphMethod, args=args)
+            self.nodes[key] = Node(graphInstanceMethod.graphObject, graphInstanceMethod.graphMethod, args=args)
         return self.nodes.get(key)
 
     def isComputing(self):
@@ -49,14 +49,14 @@ class Graph(object):
         """
         # TODO: Consider rewriting as a visitor or context.
         #
-        outputNode, graph.activeNode = graph.activeNode, node
+        outputNode, self.activeNode = self.activeNode, node
         try:
             if outputNode:
                 outputNode.addInput(node)
                 node.addOutput(outputNode)
             return node.getValue()
         finally:
-            graph.activeNode = outputNode
+            self.activeNode = outputNode
 
     def setValue(self, node, value):
         """Sets for value of a node, and raises an exception
@@ -128,6 +128,8 @@ class GraphVisitor(object):
         raise NotImplementedError()
 
 # TODO: Split collections of overlays from the contexts.
+# TODO: Decouple this from the graph, making graph a paramter to __init__?
+# TODO: Store nodes in contexts, vs some special global.
 
 class GraphContext(object):
     """A graph context is collection of temporary node changes
@@ -159,7 +161,7 @@ class GraphContext(object):
     from a parent context.
 
     """
-    def __init__(self, parentGraphContext=None):
+    def __init__(self, graph=None, parentGraphContext=None):
         # TODO: At the moment contexts reference parents, and don't copy their
         #       nodes.  This means a node cleared or added to a parent context
         #       will affect the child context.  I'm not sure this is good.
@@ -171,6 +173,7 @@ class GraphContext(object):
         #       of the parent overlays at context creation time, and then
         #       break that relationship.
         #
+        self._graph = graph or _graph
         self._parentGraphContext = parentGraphContext
         self._overlays = {}           # Node overlays by node.
         self._state = {}              # Node values by node.
@@ -317,7 +320,7 @@ class GraphContext(object):
         #       the latter should not update the context when new overlays are
         #       added or removed.
         #
-        self.activeParentGraphContext, graph.activeGraphContext = graph.activeGraphContext, self
+        self.activeParentGraphContext, self._graph.activeGraphContext = self._graph.activeGraphContext, self
 
         # If we're not populating, create a dummy context to collect overlay changes that
         # we don't want to store to the the actual context.
@@ -325,9 +328,9 @@ class GraphContext(object):
         # I'm probably going to break this into two contexts at some point.
         #
         if not self._populating:
-            graph.activeGraphContext = GraphContext(parentGraphContext=graph.activeGraphContext)
-        for node in graph.activeGraphContext.allOverlays():
-            graph.activeGraphContext.applyOverlay(node)
+            self._graph.activeGraphContext = GraphContext(parentGraphContext=self._graph.activeGraphContext)
+        for node in self._graph.activeGraphContext.allOverlays():
+            self._graph.activeGraphContext.applyOverlay(node)
         return self
 
     def __exit__(self, *args):
@@ -338,9 +341,9 @@ class GraphContext(object):
         #
         if self._populating:
             self._populating = False
-        for node in graph.activeGraphContext.allOverlays():
-            graph.activeGraphContext.clearOverlay(node)
-        graph.activeGraphContext = self.activeParentGraphContext
+        for node in self._graph.activeGraphContext.allOverlays():
+            self._graph.activeGraphContext.clearOverlay(node)
+        self._graph.activeGraphContext = self.activeParentGraphContext
 
 class GraphMethod(object):
     """An unbound graph-enabled method.
@@ -711,14 +714,13 @@ class NodeChange(object):
 
     """
     def __init__(self, graphInstanceMethod, value, *args):
-        self.graphObject = graphInstanceMethod.graphObject
-        self.graphMethod = graphInstanceMethod.graphMethod
+        self.graphInstanceMethod = graphInstanceMethod
         self.value = value
         self.args = args
 
     @property
     def node(self):
-        return graph.lookupNode(self.graphObject, self.graphMethod, self.args, create=True)
+        return _graph.lookupNode(self.graphInstanceMethod, self.args, create=True)
 
 
 class GraphInstanceMethod(object):
@@ -732,8 +734,12 @@ class GraphInstanceMethod(object):
         self.graphObject = graphObject
         self.graphMethod = graphMethod
 
+    @property
+    def name(self):
+        return self.graphMethod.name
+
     def node(self, *args):
-        return graph.lookupNode(self.graphObject, self.graphMethod, args, create=True)
+        return _graph.lookupNode(self, args, create=True)
 
     def __call__(self, *args):
         return self.getValue(*args)
@@ -743,14 +749,14 @@ class GraphInstanceMethod(object):
         graph state.
 
         """
-        return graph.getValue(self.node(*args))
+        return _graph.getValue(self.node(*args))
 
     def setValue(self, value, *args):
         # TODO: Is this the right place for delegation, or should
         #       we do that within the node implementation?  I
         #       don't like it in Node, because a node doesn't know
         #       about the global graph state.  We could put it in
-        #       a higher level (perhaps in graph.setValue()) perhaps.
+        #       a higher level (perhaps in _graph.setValue()) perhaps.
         #       There is a lot of coupling between all of these
         #       things but the code is simple enough it should be
         #       easy to refactor as needs demand.
@@ -758,18 +764,18 @@ class GraphInstanceMethod(object):
         if self.graphMethod.delegatesChanges():
             nodeChanges = self.graphMethod.delegateTo(self.graphObject, value, *args)
             for nodeChange in nodeChanges:
-                graph.setValue(nodeChange.node, nodeChange.value)
+                _graph.setValue(nodeChange.node, nodeChange.value)
             return
-        graph.setValue(self.node(*args), value)
+        _graph.setValue(self.node(*args), value)
 
     def clearSet(self, *args):
-        graph.clearSet(self.node(*args))
+        _graph.clearSet(self.node(*args))
 
     def overlayValue(self, value, *args):
-        graph.overlayValue(self.node(*args), value)
+        _graph.overlayValue(self.node(*args), value)
 
     def clearOverlay(self, *args):
-        graph.clearOverlay(self.node(*args))
+        _graph.clearOverlay(self.node(*args))
 
     def isSet(self, *args):
         return self.node(*args).isSet()
@@ -855,7 +861,7 @@ def graphMethod(funcOrFlags=0, delegateTo=None):
         return GraphMethod(f, f.__name__, funcOrFlags, delegateTo=delegateTo)
     return wrap
 
-graph = Graph()
+_graph = Graph()
 
 # TODO: Add a node garbage collector (perhaps weakref).
 # TODO: Add multithreading support.
