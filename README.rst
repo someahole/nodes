@@ -45,7 +45,7 @@ Features
 Current Limitations
 -------------------
 
-* Performance.  The current version focuses on the developer interface, and 
+* Runtime overhead.  The current version focuses on the developer interface, and 
   is not tuned for high performance.  So there is overhead
   associated with each on-graph method that will impact
   programs that require high performance.  

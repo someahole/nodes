@@ -10,20 +10,21 @@ Serializable = 0x2
 Saved        = Settable | Serializable
 
 class Graph(object):
-    """Core graph plumbing; essentially the controller.
+    """The core graph plumbing; essentially the controller and
+    global runtime state.
 
     """
     def __init__(self):
-        self.nodes = {}                 # All nodes in the graph, by node key.
-        self.activeNode = None
-        self.activeGraphContext = None
+        self.nodes = {}
+        self.activeNode = None          # The active node during a computation.
+        self.activeGraphContext = None  # The active context.
 
     def lookupNode(self, graphObject, graphMethod, args, create=True):
         """Returns the Node underlying the given object and its method
         as called with the specified arguments.
 
         """
-        key = (graphObject, graphMethod) + args
+        key = (graphObject, graphMethod.name) + args
         if key not in self.nodes and create:
             self.nodes[key] = Node(graphObject, graphMethod, args=args)
         return self.nodes.get(key)
@@ -125,6 +126,8 @@ class GraphVisitor(object):
 
         """
         raise NotImplementedError()
+
+# TODO: Split collections of overlays from the contexts.
 
 class GraphContext(object):
     """A graph context is collection of temporary node changes
@@ -430,10 +433,6 @@ class GraphMethod(object):
         """
         return self.method(graphObject, *args)
 
-# TODO: Consider introducing the notion of a value store, 
-#       either at the graph context level or elsewhere, generalizing 
-#       the case of how we store and manage node value.
-#
 class Node(object):
     """A node on the graph.
 
