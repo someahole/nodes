@@ -176,15 +176,15 @@ That said, here is the code::
 
     class Example(nodes.GraphObject):
 
-        @nodes.graphmethod
+        @nodes.graphMethod
         def X(self):
             return 'X:%s:%s' % (self.Y(), self.Z())
       
-        @nodes.graphmethod(nodes.Settable)
+        @nodes.graphMethod(nodes.Settable)
         def Y(self):
             return 'Y'
              
-        @nodes.graphmethod(nodes.Settable)
+        @nodes.graphMethod(nodes.Settable)
         def Z(self):
             return 'Z'
      
