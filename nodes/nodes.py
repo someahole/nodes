@@ -827,7 +827,7 @@ class GraphType(type):
 
     """
     def __init__(cls, name, bases, attrs):
-        for k,v in attrs.items():
+        for k,v in attrs.iteritems():
             if isinstance(v, GraphMethod) and v.name != k:
                 v_ = copy.copy(v)
                 v_.name = k
@@ -839,13 +839,8 @@ class GraphType(type):
         if name != 'GraphObject' and '__init__' in cls.__dict__:
             raise RuntimeError("GraphObject {} is not permitted to override __init__".format(name))
 
-        graphMethods = []
-        for k in dir(cls):
-            v = getattr(cls, k)
-            if isinstance(v, GraphMethod):
-                graphMethods.append(v)
-        cls._graphMethods = graphMethods
-        cls._savedGraphMethods = [graphMethod for graphMethod in graphMethods if graphMethod.isSaved()]
+        cls._graphMethods = [getattr(cls, k) for k in dir(cls) if isinstance(v, GraphMethod)]
+        cls._savedGraphMethods = filter(lambda x: x.isSaved(), cls._graphMethods)
 
 class GraphObject(object):
     """A graph-enabled object.
@@ -865,7 +860,7 @@ class GraphObject(object):
             v = getattr(self, k)
             if isinstance(v, GraphMethod):
                 object.__setattr__(self, k, GraphInstanceMethod(self, getattr(self,k)))
-        for k,v in kwargs.items():
+        for k,v in kwargs.iteritems():
             attr = getattr(self, k)
             if not isinstance(attr, GraphInstanceMethod):
                 raise RuntimeError("Not a GraphInstanceMethod: %s" % k)
@@ -876,7 +871,7 @@ class GraphObject(object):
 
         """
         # TODO: Flesh this out a bit: deep toDict, including settable nodes, perhaps, etc.
-        return dict([(k.name, getattr(self, k.name)()) for k in self._savedGraphMethods])
+        return dict((k.name, getattr(self, k.name)()) for k in self._savedGraphMethods)
 
 def graphMethod(funcOrFlags=0, delegateTo=None):
     """Declare a GraphObject method as on-graph.
